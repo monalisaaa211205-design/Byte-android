@@ -22,6 +22,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import java.nio.ByteBuffer
+import java.io.File
 
 
 enum class TargetFormat(
@@ -198,6 +199,11 @@ object ImageConverter {
     private fun decodeAndCorrectOrientation(context: Context, uri: Uri): Bitmap? {
         val resolver = context.contentResolver
 
+        // SVG check goes FIRST, before any EXIF/bitmap decoding
+        if (resolver.getType(uri) == "image/svg+xml" || uri.toString().endsWith(".svg", ignoreCase = true)) {
+            return decodeSvgToBitmap(context, uri)
+        }
+
         val orientation = resolver.openInputStream(uri)?.use { stream: InputStream ->
             val exif = ExifInterface(stream)
             exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
@@ -213,37 +219,26 @@ object ImageConverter {
             ExifInterface.ORIENTATION_ROTATE_270 -> 270f
             else -> 0f
         }
-
         if (rotationAngle == 0f) return rawBitmap
 
         val matrix = Matrix().apply { postRotate(rotationAngle) }
-        val rotatedBitmap = Bitmap.createBitmap(
-            rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, matrix, true
-        )
+        val rotated = Bitmap.createBitmap(rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, matrix, true)
         rawBitmap.recycle()
-        return rotatedBitmap
-    
-        // INTERCEPT SVG FILES HERE:
-        if (resolver.getType(uri) == "image/svg+xml") {
-            return decodeSvgToBitmap(context, uri)
-        }
+        return rotated
     }
+
     private fun decodeSvgToBitmap(context: Context, uri: Uri): Bitmap? {
-    return context.contentResolver.openInputStream(uri)?.use { stream ->
-        val svg = com.caverock.androidsvg.SVG.getFromInputStream(stream)
-        
-        // Use intrinsic vector bounds, fallback to 1000x1000 if undefined
-        val width = if (svg.documentWidth > 0) svg.documentWidth.toInt() else 1000
-        val height = if (svg.documentHeight > 0) svg.documentHeight.toInt() else 1000
-        
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(bitmap)
-        
-        // SVGs often expect a transparent background, but for JPEGs we need a white base
-        canvas.drawColor(android.graphics.Color.WHITE)
-        svg.renderToCanvas(canvas)
-        bitmap
-    }
+        return context.contentResolver.openInputStream(uri)?.use { stream ->
+            val svg = com.caverock.androidsvg.SVG.getFromInputStream(stream)
+            val width = if (svg.documentWidth > 0) svg.documentWidth.toInt() else 1000
+            val height = if (svg.documentHeight > 0) svg.documentHeight.toInt() else 1000
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            canvas.drawColor(android.graphics.Color.WHITE)
+            svg.renderToCanvas(canvas)
+            bitmap
+        }
+    }   // <-- this brace was missing
 
     suspend fun extractPdfPagesToImages(
         context: Context,
@@ -262,20 +257,14 @@ object ImageConverter {
 
                 for (i in 0 until totalPages) {
                     val page = pdfRenderer.openPage(i)
-                    
-                    // Scale the PDF page up for better image fidelity (approx 2x standard density)
-                    val densityScale = context.resources.displayMetrics.densityDpi / 160f * 2f
-                    val width = (page.width * densityScale).toInt()
-                    val height = (page.height * densityScale).toInt()
-
-                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                    val canvas = android.graphics.Canvas(bitmap)
-                    canvas.drawColor(android.graphics.Color.WHITE) // PDFs render transparent by default
-
+                    val scale = 2f   // fixed scale; the density-based one can create huge bitmaps
+                    val bitmap = Bitmap.createBitmap(
+                        (page.width * scale).toInt(), (page.height * scale).toInt(), Bitmap.Config.ARGB_8888
+                    )
+                    android.graphics.Canvas(bitmap).drawColor(android.graphics.Color.WHITE)
                     page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                     page.close()
 
-                    // Save individual page using your existing MediaStore pattern
                     val filename = "page_${i + 1}_${System.currentTimeMillis()}.${targetFormat.extension}"
                     val values = ContentValues().apply {
                         put(MediaStore.Images.Media.DISPLAY_NAME, filename)
@@ -285,12 +274,10 @@ object ImageConverter {
                             put(MediaStore.Images.Media.IS_PENDING, 1)
                         }
                     }
-
                     val outputUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
                     if (outputUri != null) {
                         resolver.openOutputStream(outputUri)?.use { out ->
-                            val compressFormat = targetFormat.compressFormat ?: Bitmap.CompressFormat.JPEG
-                            bitmap.compress(compressFormat, quality, out)
+                            bitmap.compress(targetFormat.compressFormat ?: Bitmap.CompressFormat.JPEG, quality, out)
                         }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                             values.clear()
@@ -301,18 +288,62 @@ object ImageConverter {
                     } else {
                         results.add(Result.failure(Exception("MediaStore insert failed for page $i")))
                     }
-
                     bitmap.recycle()
                     onProgress(i + 1, totalPages)
                 }
                 pdfRenderer.close()
             }
-        }.onFailure { e ->
-            results.add(Result.failure(e))
-        }
+        }.onFailure { e -> results.add(Result.failure(e)) }
 
         results
     }
-    
+
+    suspend fun extractAudio(context: Context, videoUri: Uri): Result<Uri> = withContext(Dispatchers.IO) {
+        runCatching {
+            val tempFile = File(context.cacheDir, "audio_${System.currentTimeMillis()}.m4a")
+            val extractor = MediaExtractor()
+            try {
+                extractor.setDataSource(context, videoUri, null)
+                val track = (0 until extractor.trackCount).firstOrNull {
+                    extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+                } ?: throw Exception("This video has no audio track.")
+
+                extractor.selectTrack(track)
+                val muxer = MediaMuxer(tempFile.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+                val outTrack = muxer.addTrack(extractor.getTrackFormat(track))
+                muxer.start()
+
+                val buffer = ByteBuffer.allocate(1 shl 20)
+                val info = MediaCodec.BufferInfo()
+                while (true) {
+                    info.size = extractor.readSampleData(buffer, 0)
+                    if (info.size < 0) break
+                    info.presentationTimeUs = extractor.sampleTime
+                    info.flags = extractor.sampleFlags
+                    muxer.writeSampleData(outTrack, buffer, info)
+                    extractor.advance()
+                }
+                muxer.stop()
+                muxer.release()
+            } finally {
+                extractor.release()
+            }
+
+            // Copy from cache into Music/OmniConvert
+            val values = ContentValues().apply {
+                put(MediaStore.Audio.Media.DISPLAY_NAME, "audio_${System.currentTimeMillis()}.m4a")
+                put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Audio.Media.RELATIVE_PATH, Environment.DIRECTORY_MUSIC + "/OmniConvert")
+                }
+            }
+            val outUri = context.contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+                ?: throw Exception("Could not create audio file entry.")
+            context.contentResolver.openOutputStream(outUri)?.use { out ->
+                tempFile.inputStream().use { it.copyTo(out) }
+            }
+            tempFile.delete()
+            outUri
+        }
     }
-}
+}   // closes object ImageConverter

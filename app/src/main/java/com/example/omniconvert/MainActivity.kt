@@ -166,7 +166,7 @@ fun converterScreen(initialUris: List<Uri> = emptyList()) {
 
         // Format selector
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TargetFormat.entries.forEach { format ->
+            TargetFormat.entries.filter { it != TargetFormat.M4A }.forEach { format ->
                 FilterChip(
                     selected = (selectedFormat == format),
                     onClick = { selectedFormat = format },

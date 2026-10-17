@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+gradle/gradle-9.8.1-bin.zip
+gradle/gradle-9.8.1-bin/
+gradle/wrapper/wrapper/
