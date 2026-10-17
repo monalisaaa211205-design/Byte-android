@@ -53,6 +53,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     // Coil (Image loading library to preview picked & converted images easily)
     implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("com.caverock:androidsvg-aar:1.4")
 
     // Coroutines for running heavy image conversions off the UI thread
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")

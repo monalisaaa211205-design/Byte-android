@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val sharedUris by sharedUrisState
-                    ConverterScreen(initialUris = sharedUris)
+                    converterScreen(initialUris = sharedUris)
                 }
             }
         }
@@ -75,9 +75,11 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConverterScreen(initialUris: List<Uri> = emptyList()) {
+
+fun converterScreen(initialUris: List<Uri> = emptyList()) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val mimeTypes = arrayOf("image/*", "video/*")
 
     var selectedUris by remember { mutableStateOf<List<Uri>>(initialUris) }
     var selectedFormat by remember { mutableStateOf(TargetFormat.JPEG) }
