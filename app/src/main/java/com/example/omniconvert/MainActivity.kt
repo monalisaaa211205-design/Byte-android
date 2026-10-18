@@ -36,8 +36,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val sharedUris by sharedUrisState
-                    converterScreen(initialUris = sharedUris)
+                    AppNav()
                 }
             }
         }
