@@ -196,7 +196,7 @@ object ImageConverter {
         results
     }
 
-    private fun decodeAndCorrectOrientation(context: Context, uri: Uri): Bitmap? {
+    internal fun decodeAndCorrectOrientation(context: Context, uri: Uri): Bitmap? {
         val resolver = context.contentResolver
 
         // SVG check goes FIRST, before any EXIF/bitmap decoding
