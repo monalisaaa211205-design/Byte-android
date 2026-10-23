@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.omniconvert"
-        minSdk = 28
+        minSdk = 29
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
@@ -48,7 +48,6 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     testImplementation(libs.junit)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
@@ -57,7 +56,6 @@ dependencies {
 
     // Coil (Image loading library to preview picked & converted images easily)
     implementation("io.coil-kt:coil-compose:2.6.0")
-    implementation("com.caverock:androidsvg-aar:1.4")
 
     // Coroutines for running heavy image conversions off the UI thread
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")

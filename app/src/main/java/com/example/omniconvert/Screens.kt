@@ -74,7 +74,7 @@ fun AppNav() {
     val nav = rememberNavController()
     NavHost(nav, startDestination = "home") {
         composable("home") {
-            ListScreen("OmniConvert", categories.map { it.title }) { index ->
+            ListScreen("Byte", categories.map { it.title }) { index ->
                 nav.navigate("category/${categories[index].id}")
             }
         }
