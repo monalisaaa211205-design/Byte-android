@@ -2,14 +2,23 @@ package com.example.omniconvert
 
 import android.content.ContentValues
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.exifinterface.media.ExifInterface
 import com.caverock.androidsvg.SVG
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.PDPage
+import com.tom_roush.pdfbox.pdmodel.PDPageContentStream
+import com.tom_roush.pdfbox.pdmodel.common.PDRectangle
+import com.tom_roush.pdfbox.pdmodel.graphics.image.JPEGFactory
+import com.tom_roush.pdfbox.pdmodel.graphics.image.LosslessFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.OutputStream
@@ -166,5 +175,103 @@ object PdfTools {
                 sources.forEach { runCatching { it.close() } }
             }
         }
+    }
+
+    /** Converts images into one PDF, one page each. JPEG-compressed, so files stay small. */
+    suspend fun imagesToPdf(
+        context: Context,
+        uris: List<Uri>,
+        maxSide: Int = 2000,      // longest edge in px; 1600-2000 is plenty for reading
+        quality: Float = 0.8f,    // JPEG quality
+        onProgress: (current: Int, total: Int) -> Unit
+    ): Result<Uri> = withContext(Dispatchers.IO) {
+        PDFBoxResourceLoader.init(context.applicationContext)
+        runCatching {
+            if (uris.isEmpty()) throw IllegalArgumentException("No images selected.")
+            PDDocument().use { doc ->
+                uris.forEachIndexed { index, uri ->
+                    val bmp = decodeForPdf(context, uri, maxSide)
+                        ?: throw Exception("Could not read image #${index + 1}.")
+                    try {
+                        // JPEG for photos; lossless only when transparency must be kept
+                        val img = if (bmp.hasAlpha()) LosslessFactory.createFromImage(doc, bmp)
+                        else JPEGFactory.createFromImage(doc, bmp, quality)
+
+                        // Fit onto a page whose longest side is A4-ish (842 pt)
+                        val scale = 842f / maxOf(bmp.width, bmp.height)
+                        val w = bmp.width * scale
+                        val h = bmp.height * scale
+                        val page = PDPage(PDRectangle(w, h))
+                        doc.addPage(page)
+                        PDPageContentStream(doc, page).use { it.drawImage(img, 0f, 0f, w, h) }
+                    } finally {
+                        bmp.recycle()
+                    }
+                    onProgress(index + 1, uris.size)
+                }
+                savePdf(context, "images_${System.currentTimeMillis()}.pdf", "") { out ->
+                    doc.save(out)
+                }
+            }
+        }
+    }
+
+
+    /** Decodes downscaled (memory-safe) and applies EXIF rotation. */
+    /** Decodes downscaled (memory-safe) and applies EXIF rotation. SVGs are rasterised. */
+    private fun decodeForPdf(context: Context, uri: Uri, maxSide: Int): Bitmap? {
+        val resolver = context.contentResolver
+
+        if (resolver.getType(uri) == "image/svg+xml" || uri.toString()
+                .endsWith(".svg", ignoreCase = true)
+        ) {
+            val svgBmp = ImageConverter.decodeAndCorrectOrientation(context, uri) ?: return null
+            svgBmp.setHasAlpha(false)   // it's filled white, so JPEG is fine
+            val longest = maxOf(svgBmp.width, svgBmp.height)
+            if (longest <= maxSide) return svgBmp
+            val s = maxSide.toFloat() / longest
+            val scaled = Bitmap.createScaledBitmap(
+                svgBmp,
+                (svgBmp.width * s).toInt().coerceAtLeast(1),
+                (svgBmp.height * s).toInt().coerceAtLeast(1),
+                true
+            )
+            if (scaled !== svgBmp) svgBmp.recycle()
+            return scaled
+        }
+
+        // 1) read size only
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0) return null
+
+        // 2) decode with a power-of-two subsample close to the target
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        var bmp = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+            ?: return null
+
+        // 3) exact resize + EXIF rotation in one matrix pass
+        val orientation = resolver.openInputStream(uri)?.use {
+            ExifInterface(it).getAttributeInt(
+                ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL
+            )
+        } ?: ExifInterface.ORIENTATION_NORMAL
+
+        val m = Matrix()
+        val longest = maxOf(bmp.width, bmp.height)
+        if (longest > maxSide) m.postScale(maxSide.toFloat() / longest, maxSide.toFloat() / longest)
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> m.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> m.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> m.postRotate(270f)
+        }
+        if (!m.isIdentity) {
+            val out = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+            if (out !== bmp) bmp.recycle()
+            bmp = out
+        }
+        return bmp
     }
 }

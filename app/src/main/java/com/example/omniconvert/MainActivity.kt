@@ -21,6 +21,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -28,16 +30,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         handleIncomingIntent(intent)
 
         setContent {
-            MaterialTheme {
+            MaterialTheme ( colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()){
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNav()
+                    Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                        AppNav()
+                    }
                 }
+
             }
         }
     }
