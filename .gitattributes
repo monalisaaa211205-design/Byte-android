@@ -1,0 +1,9 @@
+# Default everything to normalize to LF in the repo
+* text=auto eol=lf
+
+# Explicitly ensure Gradle wrapper and bash scripts always keep LF
+gradlew text eol=lf
+*.sh text eol=lf
+
+# Keep Windows batch files as CRLF
+*.bat text eol=crlf

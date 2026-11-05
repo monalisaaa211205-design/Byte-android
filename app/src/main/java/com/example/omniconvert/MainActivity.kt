@@ -21,6 +21,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -28,16 +30,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         handleIncomingIntent(intent)
 
         setContent {
-            MaterialTheme {
+            MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val sharedUris by sharedUrisState
-                    ConverterScreen(initialUris = sharedUris)
+                    ByteApp(sharedUris = sharedUrisState.value)
                 }
             }
         }
@@ -75,9 +77,11 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConverterScreen(initialUris: List<Uri> = emptyList()) {
+
+fun converterScreen(initialUris: List<Uri> = emptyList()) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val mimeTypes = arrayOf("image/*", "video/*")
 
     var selectedUris by remember { mutableStateOf<List<Uri>>(initialUris) }
     var selectedFormat by remember { mutableStateOf(TargetFormat.JPEG) }
@@ -164,7 +168,7 @@ fun ConverterScreen(initialUris: List<Uri> = emptyList()) {
 
         // Format selector
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TargetFormat.entries.forEach { format ->
+            TargetFormat.entries.filter { it != TargetFormat.M4A }.forEach { format ->
                 FilterChip(
                     selected = (selectedFormat == format),
                     onClick = { selectedFormat = format },
