@@ -25,13 +25,16 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontFamily
 
 // ---------- Root: bottom nav, one tab per category in Screens.kt ----------
 
 @Composable
 fun ByteApp(sharedUris: List<Uri> = emptyList()) {
+    // 0 = PDF Tools, 1 = Images, 2 = Audio
     var tab by remember { mutableStateOf(0) }
-    LaunchedEffect(sharedUris) { if (sharedUris.isNotEmpty()) tab = 0 }
+    LaunchedEffect(sharedUris) { if (sharedUris.isNotEmpty()) tab = 1 }
 
     val imageCat = categories.first { it.id == "image" }
     val pdfCat = categories.first { it.id == "pdf" }
@@ -42,32 +45,31 @@ fun ByteApp(sharedUris: List<Uri> = emptyList()) {
             NavigationBar {
                 NavigationBarItem(
                     selected = tab == 0, onClick = { tab = 0 },
-                    icon = { Icon(Icons.Filled.Home, contentDescription = null) },
-                    label = { Text("Images") }
+                    icon = { Icon(Icons.Filled.Build, contentDescription = null) },
+                    label = { Text("PDF Tools", fontFamily= Redaction35) }
                 )
                 NavigationBarItem(
                     selected = tab == 1, onClick = { tab = 1 },
-                    icon = { Icon(Icons.Filled.Build, contentDescription = null) },
-                    label = { Text("PDF Tools") }
+                    icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+                    label = { Text("Image Tools", fontFamily= Redaction35) }
                 )
                 NavigationBarItem(
                     selected = tab == 2, onClick = { tab = 2 },
                     icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
-                    label = { Text("Audio") }
+                    label = { Text("Audio Tools", fontFamily= Redaction35) }
                 )
             }
         }
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (tab) {
-                0 -> ToolsScreen(imageCat, "Byte", "Batch Image Processor • 100% Offline", sharedUris)
-                1 -> ToolsScreen(pdfCat, "PDF Quick Tools", "PdfBox-Android Powered")
-                else -> ToolsScreen(videoCat, "Audio Tools", "Extract audio from video")
+                0 -> ToolsScreen(pdfCat, "Byte", "PdfBox•Android Powered•100% Offline")
+                1 -> ToolsScreen(imageCat, "Byte", "Batch Image Processor•100% Offline", sharedUris)
+                else -> ToolsScreen(videoCat, "Byte", "Audio Extraction•100% Offline")
             }
         }
     }
 }
-
 // ---------- One screen layout used by every tab ----------
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -101,9 +103,6 @@ fun ToolsScreen(
         if (uris.isNotEmpty()) { picked = uris; outcome = null }
     }
 
-    val mimes: Array<String> = selected?.let { arrayOf(it.inputMime) }
-        ?: category.conversions.map { it.inputMime }.distinct().toTypedArray()
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -111,29 +110,18 @@ fun ToolsScreen(
             .padding(horizontal = 24.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(title, style = MaterialTheme.typography.displaySmall, textAlign = TextAlign.Center)
+        Text(
+            title,
+            style = MaterialTheme.typography.displaySmall,
+            fontFamily = Redaction35,
+            textAlign = TextAlign.Center
+        )
         Spacer(Modifier.height(12.dp))
         Text(subtitle, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(24.dp))
 
-        FileBox(
-            if (picked.isEmpty()) "No files selected" else "${picked.size} file(s) selected",
-            Modifier.fillMaxWidth().height(110.dp)
-        )
-        Spacer(Modifier.height(16.dp))
-
-        Button(
-            onClick = { picker.launch(mimes) },
-            modifier = Modifier.fillMaxWidth().height(52.dp)
-        ) {
-            Text(if (category.id == "image") "Select Photos (Single or Batch)" else "Select File(s)")
-        }
-
-        Spacer(Modifier.height(24.dp))
-        HorizontalDivider()
-        Spacer(Modifier.height(24.dp))
-
-        Text("Choose Tool", style = MaterialTheme.typography.titleLarge, modifier = Modifier.fillMaxWidth())
+        // ---- Step 1: choose the tool ----
+        Text("Choose Tool", style = MaterialTheme.typography.titleLarge, fontFamily = Redaction10, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(16.dp))
 
         category.conversions.forEach { conv ->
@@ -146,7 +134,7 @@ fun ToolsScreen(
             Spacer(Modifier.height(12.dp))
         }
 
-        // Extra options for tools that need them (resize & compress)
+        // Options for the chosen tool (resize & compress), right under the tools
         selected?.let { conv ->
             if (conv.hasScale) {
                 Spacer(Modifier.height(8.dp))
@@ -173,7 +161,34 @@ fun ToolsScreen(
         }
 
         Spacer(Modifier.height(24.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(24.dp))
 
+        // ---- Step 2: pick the files ----
+        Text("Select Files", style = MaterialTheme.typography.titleLarge, fontFamily = Redaction10,modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(16.dp))
+
+        FileBox(
+            when {
+                picked.isNotEmpty() -> "${picked.size} file(s) selected"
+                selected == null -> "Choose a tool first"
+                else -> "No files selected"
+            },
+            Modifier.fillMaxWidth().height(110.dp)
+        )
+        Spacer(Modifier.height(16.dp))
+
+        Button(
+            enabled = selected != null,
+            onClick = { selected?.let { picker.launch(arrayOf(it.inputMime)) } },
+            modifier = Modifier.fillMaxWidth().height(52.dp)
+        ) {
+            Text(if (selected?.multiple == true) "Select Files (Single or Batch)" else "Select File")
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        // ---- Step 3: convert ----
         Button(
             enabled = picked.isNotEmpty() && selected != null && !busy,
             modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -226,8 +241,8 @@ fun ToolsScreen(
     if (showOpenPrompt) {
         AlertDialog(
             onDismissRequest = { showOpenPrompt = false },
-            title = { Text("Conversion complete") },
-            text = { Text("Do you want to open the converted file now?") },
+            title = { Text("Conversion complete", fontFamily = Redaction10) },
+            text = { Text("Do you want to open the converted file now?", fontFamily = Redaction10) },
             confirmButton = {
                 TextButton(onClick = {
                     showOpenPrompt = false
@@ -300,15 +315,16 @@ fun OptionCard(text: String, selected: Boolean, onClick: () -> Unit) {
     val borderColor =
         if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(13.dp),
         color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
         else MaterialTheme.colorScheme.background,
-        border = BorderStroke(1.dp, borderColor),
+        border = BorderStroke(7.dp, borderColor),
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
     ) {
         Text(
             text,
             style = MaterialTheme.typography.titleLarge,
+            fontSize= 16.sp,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp)
         )
     }
@@ -318,13 +334,14 @@ fun OptionCard(text: String, selected: Boolean, onClick: () -> Unit) {
 fun FileBox(text: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier.border(
-            1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp)
+            7.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp)
         ),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text,
             style = MaterialTheme.typography.headlineSmall,
+            fontSize = 20.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
