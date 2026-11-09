@@ -26,10 +26,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 
 // ---------- Root: bottom nav, one tab per category in Screens.kt ----------
-
+val redaction10 = FontFamily(Font(R.font.redaction10_bold))
+val redaction10_reg= FontFamily(Font(R.font.redaction10_regular))
 @Composable
 fun ByteApp(sharedUris: List<Uri> = emptyList()) {
     // 0 = PDF Tools, 1 = Images, 2 = Audio
@@ -117,11 +119,11 @@ fun ToolsScreen(
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(12.dp))
-        Text(subtitle, style = MaterialTheme.typography.bodyLarge)
+        Text(subtitle, style = MaterialTheme.typography.bodyLarge, fontFamily = redaction10_reg)
         Spacer(Modifier.height(24.dp))
 
         // ---- Step 1: choose the tool ----
-        Text("Choose Tool", style = MaterialTheme.typography.titleLarge, fontFamily = Redaction10, modifier = Modifier.fillMaxWidth())
+        Text("Choose Tool", style = MaterialTheme.typography.titleLarge, fontFamily = Redaction35, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(16.dp))
 
         category.conversions.forEach { conv ->
@@ -165,7 +167,7 @@ fun ToolsScreen(
         Spacer(Modifier.height(24.dp))
 
         // ---- Step 2: pick the files ----
-        Text("Select Files", style = MaterialTheme.typography.titleLarge, fontFamily = Redaction10,modifier = Modifier.fillMaxWidth())
+        Text("Select Files", style = MaterialTheme.typography.titleLarge, fontFamily = Redaction35,modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(16.dp))
 
         FileBox(
@@ -325,6 +327,7 @@ fun OptionCard(text: String, selected: Boolean, onClick: () -> Unit) {
             text,
             style = MaterialTheme.typography.titleLarge,
             fontSize= 16.sp,
+            fontFamily = redaction10_reg,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp)
         )
     }
@@ -342,6 +345,7 @@ fun FileBox(text: String, modifier: Modifier = Modifier) {
             text,
             style = MaterialTheme.typography.headlineSmall,
             fontSize = 20.sp,
+            fontFamily = redaction10_reg,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
